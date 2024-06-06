@@ -1,28 +1,18 @@
-import os
-from dataclasses import dataclass
-from dotenv import load_dotenv
+from pydantic_settings import BaseSettings
 
 
-load_dotenv()
-TOKEN = os.environ.get("TOKEN")
-ADMIN_IDS = os.environ.get("ADMIN_IDS")
+class Settings(BaseSettings):
+    TOKEN: str
+    ADMIN_IDS: int
+    POSTGRES_HOST: str
+    POSTGRES_PORT: int
+    POSTGRES_DB: str
+    POSTGRES_USER: str
+    POSTGRES_PASSWORD: str
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
 
 
-@dataclass
-class TgBot:
-    token: str
-    admin_ids: int
-
-
-@dataclass
-class Config:
-    tg_bot: TgBot
-
-
-def load_config() -> Config:
-    return Config(
-        tg_bot=TgBot(
-            token=TOKEN,
-            admin_ids=int(ADMIN_IDS)
-        )
-    )
+settings = Settings()
