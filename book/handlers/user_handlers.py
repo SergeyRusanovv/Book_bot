@@ -81,14 +81,22 @@ async def process_book_selection(callback_query: CallbackQuery):
         result = await session.execute(query)
         book = result.scalars().first()
 
+
+
+        user_query = select(User).where(User.user_id == )
+
         query_page = select(BookPage).where(BookPage.book_id == book.id)
+
         result_out = await session.execute(query_page)
         pages = result_out.scalars().all()
+        page_text = pages[0].text
 
-        page = pages[0]
+        async with session.begin():
+            session.add()
+
 
     await callback_query.message.answer(
-        text=page.text,
+        text=page_text,
         reply_markup=create_pagination_keyboard(
             "before",
             f"1 / {len(pages)}",
@@ -98,37 +106,37 @@ async def process_book_selection(callback_query: CallbackQuery):
 
 # Этот хэндлер будет срабатывать на нажатие инлайн-кнопки "вперед"
 # во время взаимодействия пользователя с сообщением-книгой
-@router.callback_query(F.data == 'after')
-async def process_forward_press(callback: CallbackQuery):
-        await callback.message.edit_text(
-            text=text,
-            reply_markup=create_pagination_keyboard(
-                'backward',
-                f'{users_db[callback.from_user.id]["page"]}/{len(book)}',
-                'forward'
-            )
-        )
-    await callback.answer()
+# @router.callback_query(F.data == 'after')
+# async def process_forward_press(callback: CallbackQuery):
+#         await callback.message.edit_text(
+#             text=text,
+#             reply_markup=create_pagination_keyboard(
+#                 'backward',
+#                 f'{users_db[callback.from_user.id]["page"]}/{len(book)}',
+#                 'forward'
+#             )
+#         )
+#     await callback.answer()
 
 
-@router.callback_query(F.data == 'before')
-async def process_backward_press(callback: CallbackQuery):
-    """
-    Этот хэндлер будет срабатывать на нажатие инлайн-кнопки "назад"
-    во время взаимодействия пользователя с сообщением-книгой
-    """
-    if users_db[callback.from_user.id]['page'] > 1:
-        users_db[callback.from_user.id]['page'] -= 1
-        text = book[users_db[callback.from_user.id]['page']]
-        await callback.message.edit_text(
-            text=text,
-            reply_markup=create_pagination_keyboard(
-                'backward',
-                f'{users_db[callback.from_user.id]["page"]}/{len(book)}',
-                'forward'
-            )
-        )
-    await callback.answer()
+# @router.callback_query(F.data == 'before')
+# async def process_backward_press(callback: CallbackQuery):
+#     """
+#     Этот хэндлер будет срабатывать на нажатие инлайн-кнопки "назад"
+#     во время взаимодействия пользователя с сообщением-книгой
+#     """
+#     if users_db[callback.from_user.id]['page'] > 1:
+#         users_db[callback.from_user.id]['page'] -= 1
+#         text = book[users_db[callback.from_user.id]['page']]
+#         await callback.message.edit_text(
+#             text=text,
+#             reply_markup=create_pagination_keyboard(
+#                 'backward',
+#                 f'{users_db[callback.from_user.id]["page"]}/{len(book)}',
+#                 'forward'
+#             )
+#         )
+#     await callback.answer()
 
 
 # @router.message(Command(commands='beginning'))
