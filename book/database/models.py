@@ -13,16 +13,17 @@ class User(Base):
     first_name = Column(String)
     last_name = Column(String, nullable=True)
     bookmarks = relationship('BookMark', back_populates='user')
-    books = Column(Integer, ForeignKey("users_books.id"), nullable=True)
-    users_books = relationship("UsersBook", back_populates="user")
+    progress = relationship('UserProgress', back_populates='user')
 
 
-class UsersBook(Base):
-    __tablename__ = "users_books"
+class UserProgress(Base):
+    __tablename__ = "user_progress"
     id = Column(Integer, primary_key=True, autoincrement=True)
+    last_read_page = Column(Integer, nullable=True)
     book_id = Column(Integer, ForeignKey('books.id', ondelete='CASCADE'), nullable=False)
-    users_books = relationship("Book", back_populates="users_books")
-    user = relationship("User", back_populates="users_books")
+    user_id = Column(BIGINT, ForeignKey('users.user_id'), nullable=False)
+    user = relationship("User", back_populates="progress")
+    book = relationship("Book", back_populates="user_progress")
 
 
 class Book(Base):
@@ -31,7 +32,7 @@ class Book(Base):
     name = Column(String, unique=True, index=True)
     bookmarks = relationship("BookMark", back_populates="books")
     book_page = relationship("BookPage", back_populates="book_pages")
-    users_book = relationship("UsersBook", back_populates="users_books")
+    user_progress = relationship("UserProgress", back_populates="book")
 
     def __repr__(self):
         return f"{self.name}"

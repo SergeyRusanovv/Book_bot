@@ -1,8 +1,6 @@
 from typing import List
-
 from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
-from messages.messages import LEXICON
 
 
 def create_books_list_keyboard(buttons: List[str]) -> InlineKeyboardMarkup:
