@@ -1,5 +1,3 @@
-import re
-
 from aiogram import F, Router
 from aiogram.filters import Command, CommandStart
 from aiogram.types import CallbackQuery, Message
@@ -8,14 +6,15 @@ from database.database import async_session
 from database.models import User, Book, BookPage, UserProgress
 
 from filters.filters import IsDelBookmarkCallbackData, IsDigitCallbackData
-# from keyboards.bookmarks_kb import (create_bookmarks_keyboard,
-#                                     create_edit_keyboard)
+from keyboards.bookmarks_kb import create_bookmarks_keyboard, create_edit_keyboard
 from keyboards.books_list_kb import create_books_list_keyboard
 from keyboards.pagination_kb import create_pagination_keyboard
+from keyboards.table_kb import create_table_keyboard
 
 from messages.messages import LEXICON
 
-from sqlalchemy import insert, select, text
+from sqlalchemy import select, text
+
 from services.check_user_in_db import check_user_in_db
 from services.write_book_in_db import BookWriter
 
@@ -36,13 +35,14 @@ async def process_start_command(message: Message):
         await message.answer("Вы уже зарегистрированы, продолжим?")
     else:
         async with async_session() as session:
-            new_user = insert(User).values(
-                user_id=message.from_user.id,
-                username=message.from_user.username,
-                first_name=message.from_user.first_name,
-                last_name=message.from_user.last_name
+            query = text(
+                "INSERT INTO users (user_id, username, first_name, last_name) "
+                "VALUES (:user_id, :username, :first_name, :last_name)"
             )
-            await session.execute(new_user)
+            await session.execute(query, {
+                'user_id': message.from_user.id, "username": message.from_user.username,
+                "first_name": message.from_user.first_name, "last_name": message.from_user.last_name
+                })
             await session.commit()
             await message.answer("Поздравляю вас с регистрацией!")
     await message.answer(LEXICON[message.text])
@@ -66,7 +66,7 @@ async def process_get_books_list(message: Message):
         query = select(Book)
         result = await session.execute(query)
         all_books = result.scalars().all()
-        books = [book.name for book in all_books]
+        books = [book.id for book in all_books]
 
     await message.answer(
         text=LEXICON["books_list"],
@@ -76,10 +76,10 @@ async def process_get_books_list(message: Message):
 
 @router.callback_query(lambda c: c.data and c.data.startswith('read_book_'))
 async def process_book_selection(callback_query: CallbackQuery):
-    book_title = callback_query.data[len('read_book_'):]
+    _, book_id, page_number = callback_query.data.split('_')
 
     async with async_session() as session:
-        query = select(Book).where(Book.name == book_title)
+        query = select(Book).where(Book.id == book_id)
         result = await session.execute(query)
         book = result.scalars().first()
 
@@ -117,7 +117,6 @@ async def process_book_selection(callback_query: CallbackQuery):
             f"{current_progress.last_read_page + 1} / {len(pages)}",
             "after" if current_progress.last_read_page < len(pages) - 1 else "...",
             "bookmarks",
-            "table"
         )
     )
 
@@ -167,6 +166,7 @@ async def process_forward_press(callback_query: CallbackQuery):
                   UserProgress.book_id == current_page.book_id)
         )
         progress = progress_result.scalars().first()
+        book_id = progress.book_id
 
         pages_list = await session.execute(
             select(BookPage)
@@ -192,7 +192,6 @@ async def process_forward_press(callback_query: CallbackQuery):
             f"{page + 1} / {len(pages)}",
             "after" if page < len(pages) - 1 else '...',
             "bookmarks",
-            "table"
         )
     )
 
@@ -216,6 +215,7 @@ async def process_backward_press(callback_query: CallbackQuery):
                   UserProgress.book_id == current_page.book_id)
         )
         progress = progress_result.scalars().first()
+        book_id = progress.book_id
 
         pages_list = await session.execute(
             select(BookPage)
@@ -240,8 +240,7 @@ async def process_backward_press(callback_query: CallbackQuery):
             "before" if page > 0 else '...',
             f"{page - 1} / {len(pages)}",
             "after" if page < len(pages) - 1 else '...',
-            "bookmarks",
-            "table"
+            "/bookmarks",
         )
     )
 
@@ -252,76 +251,132 @@ async def process_page_press(callback: CallbackQuery):
     Этот хэндлер будет срабатывать на нажатие инлайн-кнопки
     с номером текущей страницы и добавлять текущую страницу в закладки
     """
-    page = int(re.search(r"^\d+", callback.data)[0]) - 1
+    page_text = callback.message.text[:60]
+    user_id = callback.from_user.id
+    async with async_session() as session:
+        query = text(
+            "SELECT b_p.id, b_p.book_id "
+            "FROM book_page AS b_p "
+            "WHERE b_p.text LIKE :page_text "
+        )
+        result = await session.execute(query, {'page_text': f'%{page_text}%'})
+        result_info = result.fetchone()
+        query = text(
+            "INSERT INTO bookmarks (user_id, book_id, book_page)"
+            "VALUES (:user_id, :book_id, :book_page)"
+        )
+        await session.execute(query, {'user_id': user_id, 'book_id': result_info[1], 'book_page' : result_info[0]})
+        await session.commit()
 
     await callback.answer('Страница добавлена в закладки!')
 
-# @router.message(Command(commands='bookmarks'))
-# async def process_bookmarks_command(message: Message):
-#     """
-#     Этот хэндлер будет срабатывать на команду "/bookmarks"
-#     и отправлять пользователю список сохраненных закладок,
-#     если они есть или сообщение о том, что закладок нет
-#     """
-#     if users_db[message.from_user.id]["bookmarks"]:
-#         await message.answer(
-#             text=LEXICON[message.text],
-#             reply_markup=create_bookmarks_keyboard(
-#                 *users_db[message.from_user.id]["bookmarks"]
-#             )
-#         )
-#     else:
-#         await message.answer(text=LEXICON['no_bookmarks'])
+
+@router.message(Command(commands="bookmarks"))
+async def process_bookmarks_command(message: Message):
+    """
+    Этот хэндлер будет срабатывать на команду "/bookmarks"
+    и отправлять пользователю список сохраненных закладок,
+    если они есть или сообщение о том, что закладок нет
+    """
+    user_id = message.from_user.id
+    async with async_session() as session:
+        query = text(
+            "SELECT b_m.bookmark_id, b_p.text "
+            "FROM bookmarks AS b_m "
+            "INNER JOIN book_page AS b_p ON b_p.id = b_m.book_page "
+            "WHERE b_m.user_id = :user_id "
+        )
+        result = await session.execute(query, {'user_id': user_id})
+        bookmarks = result.all()
+        if len(bookmarks) > 0:
+            await message.answer(
+                text=LEXICON['/bookmarks'],
+                reply_markup=create_bookmarks_keyboard(
+                    bookmarks
+                )
+            )
+        else:
+            await message.answer(text=LEXICON['no_bookmarks'])
 
 
-# # Этот хэндлер будет срабатывать на нажатие инлайн-кнопки
-# # с закладкой из списка закладок
-# @router.callback_query(IsDigitCallbackData())
-# async def process_bookmark_press(callback: CallbackQuery):
-#     text = book[int(callback.data)]
-#     users_db[callback.from_user.id]['page'] = int(callback.data)
-#     await callback.message.edit_text(
-#         text=text,
-#         reply_markup=create_pagination_keyboard(
-#             'backward',
-#             f'{users_db[callback.from_user.id]["page"]}/{len(book)}',
-#             'forward'
-#         )
-#     )
+@router.callback_query(IsDigitCallbackData())
+async def process_bookmark_press(callback: CallbackQuery):
+    """
+    Этот хэндлер будет срабатывать на нажатие инлайн-кнопки
+    с закладкой из списка закладок
+    """
+    bookmark_id = int(callback.data)
+
+    async with async_session() as session:
+        query = text(
+            "SELECT b_p.text "
+            "FROM book_page AS b_p "
+            "WHERE b_p.id = :bookmark_id "
+        )
+        result = await session.execute(query, {'bookmark_id': bookmark_id})
+        info = result.fetchone()
+        page_text = str(info)
+
+    buttons = [bookmark_id, page_text]
+
+    await callback.message.answer(
+        text=page_text,
+        reply_markup=create_edit_keyboard(
+            buttons,
+        )
+    )
 
 
-# Этот хэндлер будет срабатывать на нажатие инлайн-кнопки
-# "редактировать" под списком закладок
-# @router.callback_query(F.data == 'edit_bookmarks')
-# async def process_edit_press(callback: CallbackQuery):
-#     await callback.message.edit_text(
-#         text=LEXICON[callback.data],
-#         reply_markup=create_edit_keyboard(
-#             *users_db[callback.from_user.id]["bookmarks"]
-#         )
-#     )
-#
-#
-# # Этот хэндлер будет срабатывать на нажатие инлайн-кнопки
-# # "отменить" во время работы со списком закладок (просмотр и редактирование)
-# @router.callback_query(F.data == 'cancel')
-# async def process_cancel_press(callback: CallbackQuery):
-#     await callback.message.edit_text(text=LEXICON['cancel_text'])
-#
-#
-# # Этот хэндлер будет срабатывать на нажатие инлайн-кнопки
-# # с закладкой из списка закладок к удалению
-# @router.callback_query(IsDelBookmarkCallbackData())
-# async def process_del_bookmark_press(callback: CallbackQuery):
-#     users_db[callback.from_user.id]['bookmarks'].remove(
-#         int(callback.data[:-3])
-#     )
-#     if users_db[callback.from_user.id]['bookmarks']:
-#         await callback.message.edit_text(
-#             text=LEXICON['/bookmarks'],
-#             reply_markup=create_edit_keyboard(
-#                 *users_db[callback.from_user.id]["bookmarks"]
-#             )
-#         )
-#     else:
-#         await callback.message.edit_text(text=LEXICON['no_bookmarks'])
+@router.callback_query(F.data == 'cancel')
+async def process_cancel_press(callback: CallbackQuery):
+    """
+    Этот хэндлер будет срабатывать на нажатие инлайн-кнопки
+    "отменить" во время работы со списком закладок (просмотр и редактирование)
+    """
+    await callback.message.edit_text(text=LEXICON['cancel_text'])
+
+
+@router.callback_query(IsDelBookmarkCallbackData())
+async def process_del_bookmark_press(callback: CallbackQuery):
+    """
+    Этот хэндлер будет срабатывать на нажатие инлайн-кнопки
+    с закладкой из списка закладок к удалению
+    """
+    bookmark_id = int(callback.data[:-3])
+    async with async_session() as session:
+        query = text(
+            "DELETE FROM bookmarks WHERE bookmark_id = :bookmark_id "
+        )
+        await session.execute(query, {'bookmark_id': bookmark_id})
+        await session.commit()
+    await callback.answer('Запись удалена!')
+
+
+@router.callback_query(F.data.startswith('nav_'))
+async def navigate_pages(callback: CallbackQuery):
+    _, page = callback.data.split('_')
+    page = int(page)
+    print(page)
+    page_text = callback.message.text[:60]
+    async with async_session() as session:
+        query = text(
+            "SELECT b_p.id FROM book_page AS b_p "
+            "WHERE b_p.book_id IN "
+                "(SELECT b_p.book_id "
+                "FROM book_page AS b_p "
+                "WHERE b_p.text LIKE :page_text)"
+        )
+        result = await session.execute(query, {'page_text': f'%{page_text}%'})
+        book_page_ids = result.scalars().all()
+    total_pages = (len(book_page_ids) // 98) + 1
+    counter = (page * 99) - 98
+    if page > 1:
+        buttons = book_page_ids[page * 99:]
+    else:
+        buttons = book_page_ids[:page * 99]
+    await callback.message.answer(
+        text=LEXICON['table'],
+        reply_markup=create_table_keyboard(
+            buttons=buttons, current_page=page, total_pages=total_pages, counter=counter
+        )
+    )

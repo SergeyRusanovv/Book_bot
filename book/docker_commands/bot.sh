@@ -1,7 +1,5 @@
 #!/bin/bash
 
-#alembic upgrade head
-
-cd book_bot
+cd Book_bot/book
 
 python3 main.py

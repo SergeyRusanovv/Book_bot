@@ -9,5 +9,9 @@ def create_pagination_keyboard(*buttons: str) -> InlineKeyboardMarkup:
         text=LEXICON[button] if button in LEXICON else button,
         callback_data=button) for button in buttons], width=3
     )
+    kb_builder.add(InlineKeyboardButton(
+        text="Оглавление",
+        callback_data="nav_1"
+    ))
 
     return kb_builder.as_markup()

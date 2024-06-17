@@ -3,8 +3,10 @@ from aiogram.types import BotCommand
 from messages.messages import LEXICON_COMMANDS
 
 
-# Функция для настройки кнопки Menu бота
 async def set_main_menu(bot: Bot):
+    """
+    Функция для настройки кнопки Menu бота
+    """
     main_menu_commands = [BotCommand(
         command=command,
         description=description

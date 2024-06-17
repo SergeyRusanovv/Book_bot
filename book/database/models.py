@@ -41,7 +41,6 @@ class Book(Base):
 class BookMark(Base):
     __tablename__ = 'bookmarks'
     bookmark_id = Column(Integer, primary_key=True, autoincrement=True)
-    text = Column(String)
     user_id = Column(BIGINT, ForeignKey('users.user_id', ondelete='CASCADE'), nullable=False)
     book_id = Column(Integer, ForeignKey('books.id', ondelete='CASCADE'), nullable=False)
     book_page = Column(Integer, ForeignKey('book_page.id', ondelete='CASCADE'), nullable=False)
